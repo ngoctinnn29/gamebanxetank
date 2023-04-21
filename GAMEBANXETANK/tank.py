@@ -1,9 +1,6 @@
 import pgzrun
 import random
-import math
-from random import randint
 
-from pygame import Rect
 
 WIDTH = 1000
 HEIGHT = 600
@@ -21,17 +18,14 @@ enemy_bullets = []
 enemy_change_direction_count = 0
 game_over=False
 game_started=False
+color_selected=False
 enemies =[]
 explosions =  []
 tanks = []
+bricks = []
 
-# Hàm tính khoảng cách giữa hai điểm
-def distance(pos1, pos2):
-    return math.sqrt((pos1[0] - pos2[0]) ** 2 + (pos1[1] - pos2[1]) ** 2)
 
-# Hàm kiểm tra va chạm giữa hai hình chữ nhật
-def rect_collision(rect1, rect2):
-    return rect1.colliderect(rect2)
+
 
 class Explosion(Actor):
     def __init__(self, x, y):
@@ -47,34 +41,32 @@ class Explosion(Actor):
 
 
 # dịnh dạng xe tănng mình
-tank = Actor("tank_blue")
-tank.pos = (WIDTH/2 , HEIGHT-TANK_SIZE)
+class Tank(Actor):
+    def __init__(self, image, x, y):
+        super().__init__(image, (x, y))
+        
+x = WIDTH / 2
+y = HEIGHT - TANK_SIZE
+tank = Tank("tank_blue",x ,y)
 tank.angle = 90
 
 explostion = Actor("explosion4")
 
-#định dạng xe tăng địch 
-for i in range (6):
-    enemy = Actor("tank_red")
-    while True:
-        enemy.pos = (randint(0, WIDTH-TANK_SIZE), randint(0, HEIGHT-TANK_SIZE))  # Chọn vị trí ngẫu nhiên trên màn hình
-        enemy_rect = Rect(enemy.pos, (TANK_SIZE, TANK_SIZE)) # Tạo hình chữ nhật biểu diễn vị trí của xe tăng địch
-        collision = False
-        for wall in walls:
-            if rect_collision(enemy_rect, wall):
-                collision = True
-                break
-        if not collision and distance(enemy.pos, tank.pos) >= 100: # Kiểm tra khoảng cách giữa vị trí của xe tăng người chơi và vị trí của xe tăng địch
-            break
-    enemy.angle=270
-    enemies.append(enemy)
+def on_key_down(key):
+    global tank
+    if key == keys.R:
+        tank.image = "tank_red"
+    elif key == keys.B:
+        tank.image = "tank_blue"
+    elif key == keys.G:
+        tank.image = "tank_green"
 
 # background và tường 
 background_1 = Actor('bg')
 background = Actor('grass')
 for x in range(20):
     for y in range(15): #lặp trục x y
-        if random.randint(0, 100) < 40: #tạo ngẫu nhiên các block không quá 40
+        if random.randint(0, 50) < 20: #tạo ngẫu nhiên các block không quá 20
             wall = Actor('wall')
             # Đặt các tường không chắn ngang giữa màn hình
             if x % 2 == 0:
@@ -82,11 +74,32 @@ for x in range(20):
                 wall.y = y * 50 + TANK_SIZE * 3
             else:
                 wall.x = x * 50 + TANK_SIZE
-                wall.y = y * 50 + TANK_SIZE * 3 
+                wall.y = y * 50 + TANK_SIZE * 3
             # Đặt các tường không đè lên vị trí khởi đầu của xe tank
             if wall.colliderect(tank):
                 continue
             walls.append(wall)
+        elif random.randint(0, 50) < 20:
+            # Tạo các viên gạch không trùng lên vị trí của các tường đã có
+            brick = Actor('brick')
+            brick.x = x * 50 + TANK_SIZE
+            brick.y = y * 50 + TANK_SIZE * 3
+            if brick.colliderect(tank):
+                continue
+            if any(brick.colliderect(wall) for wall in walls):
+                continue
+            bricks.append(brick)
+#định dạng xe tăng địch 
+class EnemyTank(Actor):
+    def __init__(self, image, x, y):
+        super().__init__(image, (x, y))
+        self.angle = 270
+
+for i in range (4):
+    enemy = EnemyTank("tank_red", x, y)
+    enemy.x=i *200+100
+    enemy.y=TANK_SIZE
+    enemies.append(enemy)
 
 def tank_set():
     global tank
@@ -112,7 +125,12 @@ def tank_set():
     if tank.x<TANK_SIZE or tank.x>(WIDTH-TANK_SIZE) or tank.y<TANK_SIZE or tank.y>(HEIGHT-TANK_SIZE):
         tank.x=original_x
         tank.y=original_y
-
+    if tank.collidelist(bricks)!=-1:
+        tank.x=original_x
+        tank.y=original_y
+    if tank.x<TANK_SIZE or tank.x>(WIDTH-TANK_SIZE) or tank.y<TANK_SIZE or tank.y>(HEIGHT-TANK_SIZE):
+        tank.x=original_x
+        tank.y=original_y
 
 def tank_bullets_set(): # set up về đạn xe tăng phe mình 
     global bullet_cooldown
@@ -136,6 +154,10 @@ def tank_bullets_set(): # set up về đạn xe tăng phe mình
 
     bullet_cooldown -= 1/60  # Giảm giá trị biến đếm thời gian theo tốc độ khung hình (60 khung hình/giây)
     for bullet in bullets:
+        bricks_index = bullet.collidelist(bricks)
+        if bricks_index != -1:
+            sounds.exp.play()
+            bullets.remove(bullet)
         walls_index = bullet.collidelist(walls)
         if walls_index != -1:  # Kiểm tra đạn có va chạm với tường không
             sounds.gun9.play()
@@ -149,8 +171,7 @@ def tank_bullets_set(): # set up về đạn xe tăng phe mình
             explosion = Explosion(enemies[enemy_index].x, enemies[enemy_index].y)
             explosions.append(explosion)
             bullets.remove(bullet)
-            del enemies[enemy_index]
-        
+            del enemies[enemy_index] 
 def enemy_set():
     global enemy_move_count, bullet_cooldown_2,enemy_change_direction_count
     for enemy in enemies:
@@ -168,6 +189,9 @@ def enemy_set():
             elif enemy.angle==270:
                 enemy.y=enemy.y+2
             if enemy.collidelist(walls)!=-1:
+                enemy.x=original_x
+                enemy.y=original_y
+            if enemy.collidelist(bricks)!=-1:
                 enemy.x=original_x
                 enemy.y=original_y
             if enemy.x<TANK_SIZE or enemy.x>(WIDTH-TANK_SIZE) or enemy.y<TANK_SIZE or enemy.y>(HEIGHT-TANK_SIZE):
@@ -189,7 +213,7 @@ def enemy_set():
                 bullet.angle = enemy.angle
                 bullet.pos=enemy.pos
                 enemy_bullets.append(bullet)
-                bullet_cooldown_2=40
+                bullet_cooldown_2=50
             else:
                 bullet_cooldown_2 =bullet_cooldown_2-1
         
@@ -207,6 +231,9 @@ def enemy_bullets_set():
 
     # đạn địch phá tường phá xe 
     for bullet in enemy_bullets:
+        brick_index=bullet.collidelist(bricks)
+        if brick_index!=-1:
+            sounds.exp.play()
         wall_index=bullet.collidelist(walls)
         if wall_index!=-1:
             sounds.gun10.play()
@@ -230,38 +257,64 @@ def update():
         enemy_bullets_set()
         
 def on_key_down(key):
-    global game_started
+    global game_started, tank, color_selected
     if not game_started and key == keys.SPACE:
         # Bắt đầu game khi người chơi nhấn phím SPACE
         game_started = True
+    elif game_started and not color_selected:
+        if key == keys.R:
+            tank.image = "tank_red"
+            color_selected = True
+        elif key == keys.B:
+            tank.image = "tank_blue"
+            color_selected = True
+        elif key == keys.G:
+            tank.image = "tank_green"
+            color_selected = True
+    elif color_selected and key == keys.SPACE:
+        # Reset lại biến color_selected khi người chơi nhấn phím SPACE sau khi đã chọn màu
+        color_selected = False
+
 
     
 def draw():
-        background_1.draw()
-        screen.draw.text("enter SPACE to begin!!", (WIDTH/2-325, HEIGHT-100), color="white", fontsize=80)
-        if game_started:
+    global color_selected
+    background_1.draw()
+    if not game_started:
         # Vẽ màn hình bắt đầu
-            if game_over:
-                screen.fill((0,0,0))
-                screen.draw.text("YOU LOSE",(260,250), color=(255,255,255),fontsize=100)
-
-            elif len(enemies)==0:
-                screen.fill((0,0,0))
-                screen.draw.text("YOU WIN",(260,250), color=(255,255,255),fontsize=100)
-            else:
-                background.draw()
-                tank.draw()
-                for explosion in explosions:
-                    explosion.draw()
-                    explosion.update()
-                for wall in walls:
-                    wall.draw()
-                for bullet in bullets:
-                    bullet.draw()
-                for enemy in enemies:
-                    enemy.draw()
-                for bullet in enemy_bullets:
-                    bullet.draw()
+        screen.draw.text("enter SPACE to begin!!", (WIDTH/2-325, HEIGHT-100), color="white", fontsize=80)
+    elif color_selected:
+        # Vẽ màn hình chọn màu
+        screen.fill((0, 0, 0))
+        screen.draw.text("Choose tank color:", (WIDTH/2-200, HEIGHT/2-200), color="white", fontsize=60)
+        screen.draw.text("Press R for Red", (WIDTH/2-100, HEIGHT/2-100), color="red", fontsize=40)
+        screen.draw.text("Press B for Blue", (WIDTH/2-100, HEIGHT/2), color="blue", fontsize=40)
+        screen.draw.text("Press G for Green", (WIDTH/2-100, HEIGHT/2+100), color="green", fontsize=40)
+    else:
+        # Vẽ trạng thái của trò chơi
+        if game_over:
+            screen.fill((0,0,0))
+            screen.draw.text("YOU LOSE", (300, 250), color=(255, 255, 255), fontsize=100)
+        elif len(enemies) == 0:
+            screen.fill((0,0,0))
+            screen.draw.text("YOU WIN", (300, 250), color=(255, 255, 255), fontsize=100)
+        else:
+            background.draw()
+            tank.draw()
+            for explosion in explosions:
+                explosion.draw()
+                explosion.update()
+            for wall in walls:
+                wall.draw()
+            for brick in bricks:
+                brick.draw()
+            for bullet in bullets:
+                bullet.draw()
+            for enemy in enemies:
+                enemy.draw()
+            for bullet in enemy_bullets:
+                bullet.draw()
 
 
 pgzrun.go()
+
